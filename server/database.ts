@@ -37,12 +37,18 @@ export interface AppSettings {
   enablePlaywrightMock: boolean;
 }
 
-const DB_FILE = path.join(process.cwd(), "data", "searchscrape_db.json");
+const DB_FILE = process.env.VERCEL 
+  ? path.join("/tmp", "searchscrape_db.json")
+  : path.join(process.cwd(), "data", "searchscrape_db.json");
 
 function ensureDbDirectory() {
-  const dir = path.dirname(DB_FILE);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  try {
+    const dir = path.dirname(DB_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+  } catch (err) {
+    // Suppress and rely on memory fallback
   }
 }
 
@@ -57,29 +63,46 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export class SearchScrapeDb {
+  private static memoryDb: { jobs: ScrapeJob[]; settings: AppSettings } | null = null;
+
   private static loadRaw(): { jobs: ScrapeJob[]; settings: AppSettings } {
-    ensureDbDirectory();
-    if (!fs.existsSync(DB_FILE)) {
-      const initial = { jobs: [], settings: DEFAULT_SETTINGS };
-      fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2), "utf8");
-      return initial;
+    if (this.memoryDb) {
+      return this.memoryDb;
     }
+    
     try {
+      ensureDbDirectory();
+      if (!fs.existsSync(DB_FILE)) {
+        const initial = { jobs: [], settings: DEFAULT_SETTINGS };
+        fs.writeFileSync(DB_FILE, JSON.stringify(initial, null, 2), "utf8");
+        this.memoryDb = initial;
+        return initial;
+      }
       const raw = fs.readFileSync(DB_FILE, "utf8");
       const parsed = JSON.parse(raw);
-      return {
+      const loaded = {
         jobs: parsed.jobs || [],
         settings: { ...DEFAULT_SETTINGS, ...parsed.settings },
       };
+      this.memoryDb = loaded;
+      return loaded;
     } catch (e) {
-      console.error("Database reading error, resetting database", e);
-      return { jobs: [], settings: DEFAULT_SETTINGS };
+      console.warn("[Database Info] Storage read-write restricted. Defaulting to in-memory store fallback.", e);
+      if (!this.memoryDb) {
+        this.memoryDb = { jobs: [], settings: DEFAULT_SETTINGS };
+      }
+      return this.memoryDb;
     }
   }
 
   private static saveRaw(data: { jobs: ScrapeJob[]; settings: AppSettings }) {
-    ensureDbDirectory();
-    fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), "utf8");
+    this.memoryDb = data;
+    try {
+      ensureDbDirectory();
+      fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), "utf8");
+    } catch (e) {
+      console.warn("[Database Info] File save ignored due to system permissions. Retained updates in-memory.");
+    }
   }
 
   public static getJobs(): ScrapeJob[] {

@@ -55,10 +55,29 @@ app.post("/api/scrapes", async (req, res) => {
     const limit = parseInt(totalWebsites) || 200;
 
     // Create record
-    const job = SearchScrapeDb.createJob(keyword.trim(), limit);
     const settings = SearchScrapeDb.getSettings();
 
-    // Trigger asynchronous workflow in background to avoid client HTTP timeouts
+    // On Vercel, run synchronously within the HTTP request lifecycle and cap the limit for rapid, non-blocking return
+    if (process.env.VERCEL) {
+      const vercelLimit = Math.min(limit, 8); // Max 8 sites for instant results
+      const job = SearchScrapeDb.createJob(keyword.trim(), vercelLimit);
+      
+      const fastSettings = {
+        ...settings,
+        concurrencyLimit: Math.max(settings.concurrencyLimit, 8),
+        politeModeDelayMin: 0,
+        politeModeDelayMax: 0
+      };
+
+      console.log(`[PWA/Vercel Sync] Starting fast sync crawl of ${vercelLimit} sites for: ${keyword}`);
+      await runBackgroundScraping(job.id, keyword.trim(), vercelLimit, fastSettings);
+
+      const completedJob = SearchScrapeDb.getJob(job.id) || job;
+      return res.json(completedJob);
+    }
+
+    // Default: local/persistent multi-threaded background process
+    const job = SearchScrapeDb.createJob(keyword.trim(), limit);
     runBackgroundScraping(job.id, keyword.trim(), limit, settings).catch((err) => {
       console.error(`Background job failure for ${job.id}:`, err);
       SearchScrapeDb.updateJob(job.id, { status: "failed" });

@@ -131,7 +131,7 @@ export async function scrapePage(
         "Accept-Language": "en-US,en;q=0.5",
         "Referer": "https://www.google.com/"
       },
-      timeout: 15000, // 15s absolute timeout
+      timeout: process.env.VERCEL ? 3500 : 15000, // 15s absolute timeout
       maxRedirects: 3
     });
 
