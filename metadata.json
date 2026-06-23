@@ -1,0 +1,6 @@
+{
+  "name": "SearchScrape",
+  "description": "An elite full-stack website discovery, smart scraping, and data extraction engine featuring high-concurrency crawling, automated robots.txt compliance, and AI-powered insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

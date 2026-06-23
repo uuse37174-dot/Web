@@ -1,0 +1,25 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api/index.ts"
+    },
+    {
+      "source": "/sw.js",
+      "destination": "/sw.js"
+    },
+    {
+      "source": "/manifest.json",
+      "destination": "/manifest.json"
+    },
+    {
+      "source": "/icon-512.jpg",
+      "destination": "/icon-512.jpg"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
