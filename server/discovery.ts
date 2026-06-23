@@ -232,7 +232,8 @@ export async function discoverWebsites(config: DiscoverConfig): Promise<WebpageR
   const { keyword, totalRequested, settings, onProgress } = config;
   
   // 1. Generate smart search expressions
-  const queries = await generateQueryVariations(keyword, 20);
+  const queryLimit = process.env.VERCEL ? 2 : 20;
+  const queries = await generateQueryVariations(keyword, queryLimit);
   console.log(`Generated ${queries.length} query variations for: "${keyword}"`);
   
   const uniqueUrls = new Set<string>();
@@ -240,7 +241,7 @@ export async function discoverWebsites(config: DiscoverConfig): Promise<WebpageR
 
   // 2. Iterate queries matching user request and aggregate results
   // For safety and politeness, limit to processing up to 10 queries, yielding a large amount of sites
-  const maxQueriesToProcess = Math.min(queries.length, 12);
+  const maxQueriesToProcess = process.env.VERCEL ? 2 : Math.min(queries.length, 12);
   
   for (let i = 0; i < maxQueriesToProcess; i++) {
     const query = queries[i];
@@ -256,7 +257,8 @@ export async function discoverWebsites(config: DiscoverConfig): Promise<WebpageR
     if (items.length === 0) {
       items = await searchViaDuckDuckGo(query);
       // Small polite delay between HTML search fallback crawls
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const delayTime = process.env.VERCEL ? 50 : 1500;
+      await new Promise(resolve => setTimeout(resolve, delayTime));
     }
 
     for (const item of items) {

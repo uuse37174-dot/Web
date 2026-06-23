@@ -224,12 +224,24 @@ export default function App() {
         const startedJob = await res.json();
         setActiveJob(startedJob);
       } else {
-        const errData = await res.json();
-        alert(`Error initiating search scrape: ${errData.error || "Unknown server response"}`);
+        let errorMessage = "Unknown server response";
+        try {
+          const contentType = res.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const errData = await res.json();
+            errorMessage = errData.error || "Unknown server response";
+          } else {
+            const textResponse = await res.text();
+            errorMessage = textResponse.slice(0, 200).trim() || `HTTP standard error ${res.status}`;
+          }
+        } catch (parseErr) {
+          errorMessage = `HTTP error ${res.status}`;
+        }
+        alert(`Error initiating search scrape: ${errorMessage}`);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to initiate scraping job:", err);
-      alert("Failed to communicate with discovery server.");
+      alert(`Failed to communicate with discovery server: ${err?.message || "Check network connection or server status"}`);
     }
   }
 
