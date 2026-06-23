@@ -50,9 +50,15 @@ export async function generateQueryVariations(keyword: string, limit: number = 1
 Generate exactly ${limit} unique, highly effective, smart search query modifications/expressions to run in Google/DuckDuckGo to uncover diverse, high-quality, relevant source material (e.g., blogs, tutorials, tools, directories, official docs, reviews, industry reports).
 Return them as a simple JSON array of strings: ["query 1", "query 2", ...]. Ensure no numbers, notes, or extra tags in output. Return ONLY the strict JSON array format.`;
 
-    const text = await generateContentWithRetry(prompt, undefined, {
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Gemini query generation timeout")), 3500)
+    );
+
+    const fetchPromise = generateContentWithRetry(prompt, undefined, {
       responseMimeType: "application/json"
     });
+
+    const text = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (text) {
       const parsed = JSON.parse(text);

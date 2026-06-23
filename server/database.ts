@@ -29,6 +29,7 @@ export interface ScrapeJob {
 
 export interface AppSettings {
   serpApiKey: string;
+  geminiApiKey?: string;
   concurrencyLimit: number;
   politeModeDelayMin: number;
   politeModeDelayMax: number;
@@ -54,6 +55,7 @@ function ensureDbDirectory() {
 
 const DEFAULT_SETTINGS: AppSettings = {
   serpApiKey: "",
+  geminiApiKey: "",
   concurrencyLimit: 8,
   politeModeDelayMin: 1,
   politeModeDelayMax: 3,

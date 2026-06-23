@@ -51,6 +51,7 @@ export default function App() {
   const [jobHistory, setJobHistory] = useState<Omit<ScrapeJob, "results">[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
     serpApiKey: "",
+    geminiApiKey: "",
     concurrencyLimit: 8,
     politeModeDelayMin: 1,
     politeModeDelayMax: 3,
@@ -1081,8 +1082,7 @@ export default function App() {
               </div>
 
               <div className="p-6 space-y-5">
-                
-                {/* Connection to SERPAPI key (NOT Gemini) */}
+                        {/* Connection to SERPAPI key (NOT Gemini) */}
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="text-xs font-medium text-gray-300">
@@ -1099,6 +1099,26 @@ export default function App() {
                   />
                   <p className="text-[10px] text-gray-500 mt-1">
                     If missing, SearchScrape falls back to polite organic HTML index scraping.
+                  </p>
+                </div>
+
+                {/* Connection to GEMINI_API_KEY override */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-medium text-gray-300">
+                      Gemini API Key Override (Optional)
+                    </label>
+                    <span className="text-[10px] font-mono text-[#E4A8FF]">AI Summarizer & Insights</span>
+                  </div>
+                  <input 
+                    type="password"
+                    value={settings.geminiApiKey || ""}
+                    onChange={(e) => setSettings({ ...settings, geminiApiKey: e.target.value })}
+                    placeholder="Enter custom Gemini key (starts with AIzaSy...)"
+                    className="w-full bg-[#0F1117] border border-[#2D3748] rounded px-3 py-2 text-xs focus:border-[#39FF14] outline-none text-white"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    Optionally paste your Google AI Studio Gemini API Key if hosted in serverless environments with closed integrations.
                   </p>
                 </div>
 

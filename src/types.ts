@@ -26,6 +26,7 @@ export interface ScrapeJob {
 
 export interface AppSettings {
   serpApiKey: string;
+  geminiApiKey?: string;
   concurrencyLimit: number;
   politeModeDelayMin: number;
   politeModeDelayMax: number;

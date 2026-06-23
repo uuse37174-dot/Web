@@ -25,7 +25,7 @@ export async function isAllowedByRobotsTxt(url: string, userAgent = "SearchScrap
     
     const response = await axios.get(robotsUrl, {
       headers: { "User-Agent": getRandomAgent() },
-      timeout: 5000,
+      timeout: process.env.VERCEL ? 1500 : 5000,
       validateStatus: (stat) => stat === 200
     });
 
@@ -91,7 +91,12 @@ Scraped web page text:
 ${truncated}`;
 
   try {
-    const text = await generateContentWithRetry(prompt);
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Gemini summary generation timeout")), 3000)
+    );
+
+    const fetchPromise = generateContentWithRetry(prompt);
+    const text = await Promise.race([fetchPromise, timeoutPromise]);
     return text || "";
   } catch (e: any) {
     console.warn("All AI summarization attempts failed, falling back to local extractor:", e.message || e);

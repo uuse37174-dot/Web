@@ -1,9 +1,8 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { SearchScrapeDb, AppSettings } from "./server/database";
 import { discoverWebsites } from "./server/discovery";
-import { scrapeBatch } from "./server/scraper";
+import { scrapeBatch, scrapePage } from "./server/scraper";
 
 const app = express();
 const PORT = 3000;
@@ -32,14 +31,63 @@ app.get("/api/scrapes", (req, res) => {
 });
 
 // 2. Get specific job details with full webpage crawl results
-app.get("/api/scrapes/:id", (req, res) => {
+app.get("/api/scrapes/:id", async (req, res) => {
   try {
     const id = req.params.id;
     const job = SearchScrapeDb.getJob(id);
     if (!job) {
       return res.status(404).json({ error: "Scraping project not found" });
     }
-    res.json(job);
+
+    // Vercel Serverless lazy-evaluation incremental crawler
+    if (process.env.VERCEL && job.status === "scraping") {
+      const webpageResults = [...job.results];
+      
+      // Find the first result in webpageResults that has is pending
+      const nextPendingIndex = webpageResults.findIndex(r => r.status === "pending" || r.status === "scraping");
+      if (nextPendingIndex !== -1) {
+        const resultItem = webpageResults[nextPendingIndex];
+
+        // Mark as working
+        webpageResults[nextPendingIndex].status = "scraping";
+        SearchScrapeDb.updateJobResults(job.id, webpageResults);
+
+        try {
+          const settings = SearchScrapeDb.getSettings();
+          const updates = await scrapePage(resultItem, job.keyword, settings);
+          
+          // Merge updates
+          webpageResults[nextPendingIndex] = {
+            ...resultItem,
+            ...updates
+          };
+        } catch (scrapeErr: any) {
+          webpageResults[nextPendingIndex] = {
+            ...resultItem,
+            status: "failed",
+            errorReason: scrapeErr.message || "Unknown scraper failure"
+          };
+        }
+
+        // Count current states
+        const successful = webpageResults.filter(r => r.status === "success").length;
+        const failed = webpageResults.filter(r => r.status === "failed").length;
+        const isFinished = webpageResults.every(r => r.status === "success" || r.status === "failed");
+
+        SearchScrapeDb.updateJob(job.id, {
+          websitesScraped: successful,
+          websitesFailed: failed,
+          status: isFinished ? "completed" : "scraping"
+        });
+        SearchScrapeDb.updateJobResults(job.id, webpageResults);
+      } else {
+        // No pending websites found, set job to complete
+        SearchScrapeDb.updateJob(job.id, { status: "completed" });
+      }
+    }
+
+    const freshJob = SearchScrapeDb.getJob(id) || job;
+    res.json(freshJob);
   } catch (err: any) {
     res.status(500).json({ error: err.message || "Failed to load job details" });
   }
@@ -57,23 +105,36 @@ app.post("/api/scrapes", async (req, res) => {
     // Create record
     const settings = SearchScrapeDb.getSettings();
 
-    // On Vercel, run synchronously within the HTTP request lifecycle and cap the limit for rapid, non-blocking return
+    // On Vercel, run lightning fast search discovery only, and delegate scraping to the client's poll cycle
     if (process.env.VERCEL) {
       const vercelLimit = Math.min(limit, 8); // Max 8 sites for instant results
       const job = SearchScrapeDb.createJob(keyword.trim(), vercelLimit);
       
-      const fastSettings = {
-        ...settings,
-        concurrencyLimit: Math.max(settings.concurrencyLimit, 8),
-        politeModeDelayMin: 0,
-        politeModeDelayMax: 0
-      };
+      // Perform just the discovery step online so the user sees matching URLs instantly!
+      SearchScrapeDb.updateJob(job.id, { status: "discovering" });
+      const webpageResults = await discoverWebsites({
+        keyword: keyword.trim(),
+        totalRequested: vercelLimit,
+        settings,
+        onProgress: (foundCount) => {
+          SearchScrapeDb.updateJob(job.id, { websitesFound: foundCount });
+        }
+      });
+      
+      if (webpageResults.length === 0) {
+        SearchScrapeDb.updateJob(job.id, { status: "completed", websitesFound: 0 });
+      } else {
+        SearchScrapeDb.updateJobResults(job.id, webpageResults);
+        SearchScrapeDb.updateJob(job.id, { 
+          status: "scraping",
+          websitesFound: webpageResults.length,
+          websitesScraped: 0,
+          websitesFailed: 0
+        });
+      }
 
-      console.log(`[PWA/Vercel Sync] Starting fast sync crawl of ${vercelLimit} sites for: ${keyword}`);
-      await runBackgroundScraping(job.id, keyword.trim(), vercelLimit, fastSettings);
-
-      const completedJob = SearchScrapeDb.getJob(job.id) || job;
-      return res.json(completedJob);
+      const activeJobRepresentation = SearchScrapeDb.getJob(job.id) || job;
+      return res.json(activeJobRepresentation);
     }
 
     // Default: local/persistent multi-threaded background process
@@ -175,6 +236,7 @@ if (!process.env.VERCEL) {
   async function bootstrap() {
     // Vite integration
     if (process.env.NODE_ENV !== "production") {
+      const { createServer: createViteServer } = await import("vite");
       const vite = await createViteServer({
         server: { middlewareMode: true },
         appType: "spa",

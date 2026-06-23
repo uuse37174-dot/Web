@@ -1,4 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
+import { SearchScrapeDb } from "./database";
 
 // Shared serializing chain to avoid concurrent bursts exceeding the RPM limit (5/15 RPM on free tier)
 let geminiPromiseChain: Promise<any> = Promise.resolve();
@@ -37,8 +38,12 @@ export async function generateContentWithRetry(
   ],
   config?: any
 ): Promise<string> {
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey) return "";
+  const appSettings = SearchScrapeDb.getSettings();
+  const geminiKey = (process.env.GEMINI_API_KEY || appSettings?.geminiApiKey || "").trim();
+  if (!geminiKey) {
+    console.warn("[Gemini Info] No API key provided or configured. Skipping content generation.");
+    return "";
+  }
 
   const ai = new GoogleGenAI({
     apiKey: geminiKey,
